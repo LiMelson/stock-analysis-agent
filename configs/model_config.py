@@ -90,6 +90,10 @@ class EmbeddingModel:
 
     def get_dimension(self) -> int:
         return self.dimension
+    
+    def get_sentence_embedding_dimension(self) -> int:
+        """兼容方法，与 SentenceTransformer 接口一致"""
+        return self.dimension
 
 
 class LLMClient:
@@ -123,7 +127,9 @@ class LLMClient:
         self.client = ChatOpenAI(
             model=self.model,
             api_key=self.api_key,
-            base_url=self.base_url
+            base_url=self.base_url,
+            timeout=60,  # 60秒超时
+            max_retries=2  # 最多重试2次
         )
     
     def generate(

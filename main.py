@@ -10,6 +10,10 @@
 
 import os
 import logging
+import warnings
+
+# 忽略 pydub 的 ffmpeg 警告
+warnings.filterwarnings("ignore", message="Couldn't find ffmpeg or avconv", category=RuntimeWarning)
 
 # 设置 Hugging Face 镜像源（必须在导入 model_config 之前设置！）
 os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
@@ -64,7 +68,7 @@ def main():
     
     # 【关键】只在最开始创建一次 app，复用同一个会话状态
     from core.graph import create_app
-    app = create_app(rag_tool=rag_tool)
+    app = create_app()
     
     print("=" * 60)
     print("  股票分析助手已启动！")
@@ -93,7 +97,7 @@ def main():
             print("\n助手: 再见！祝您投资顺利！")
             break
         
-        print(f"\n助手: 正在分析...")
+        print(f"\n[1/3] PlanAgent: 正在分析意图和制定计划...")
         print("-" * 40)
 
         try:
@@ -103,22 +107,29 @@ def main():
                 config={"configurable": {"thread_id": "cli_user"}}
             )
 
-            # 输出 RAG 和 Search 结果（如果有）
-            rag_answer = result.get("rag_answer", "")
-            search_result = result.get("search_result", "")
+            print("\n[2/3] 数据获取完成，正在生成报告...")
+            
+            # 显示获取到的数据摘要
+            sources_got = []
+            if result.get("index_result"): sources_got.append("大盘指数")
+            if result.get("sentiment_result"): sources_got.append("市场情绪")
+            if result.get("theme_result"): sources_got.append("题材板块")
+            if result.get("stock_result"): sources_got.append("个股数据")
+            
+            if sources_got:
+                print(f"    已获取数据: {', '.join(sources_got)}")
+            else:
+                print("    警告: 未获取到实时数据，将基于通用框架分析")
 
-            if rag_answer and rag_answer != "未配置知识库":
-                print(f"\n📚 【知识库分析】\n{rag_answer}\n")
-
-            if search_result and search_result != "未配置搜索 API":
-                print(f"\n🔍 【实时信息】\n{search_result}\n")
+            print("\n[3/3] SummaryAgent: 生成最终建议...")
+            print("=" * 40)
 
             # 输出最终建议
             final_answer = result.get("final_answer", "")
             if final_answer:
-                print(f"\n💡 【最终建议】\n{final_answer}\n")
+                print(f"\n{final_answer}\n")
             else:
-                print("\n⚠️ 未能生成回答\n")
+                print("\n未能生成回答\n")
                 
             # 【不 break】继续下一轮对话
 

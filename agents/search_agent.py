@@ -5,10 +5,11 @@ Search Agent 模块
 1. 执行网络搜索
 2. 使用 LLM 对搜索结果进行专家式总结
 3. 将总结加入 state
+4. 记录数据溯源信息用于报告可解释性
 """
 
-from typing import Dict, Any, Optional
-from tools.web_search import WebSearchTool
+from typing import Dict, Any, Optional, List
+from data_sources.sentiment import SentimentDataSource
 from configs.model_config import LLMClient
 from agents.base_agent import BaseAgent, agent_run_wrapper, AgentTimer
 from core.state import AgentState
@@ -17,11 +18,15 @@ from core.state import AgentState
 class SearchAgent(BaseAgent):
     """
     搜索 Agent - 搜索 + LLM 总结
+    
+    新增功能：
+    - 返回结构化的来源信息
+    - 记录数据溯源信息
     """
     
     def __init__(self, api_key: Optional[str] = None):
         super().__init__("SearchAgent")
-        self.search_tool = WebSearchTool(api_key=api_key)
+        self.search_tool = SentimentDataSource(api_key=api_key)
         self.llm_client = LLMClient()
     
     @agent_run_wrapper
@@ -29,7 +34,7 @@ class SearchAgent(BaseAgent):
         self,
         question: str,
         max_results: int = 5
-    ) -> str:
+    ) -> Dict[str, Any]:
         """
         执行搜索并生成专家式总结
         
@@ -38,27 +43,51 @@ class SearchAgent(BaseAgent):
             max_results: 搜索结果数量
             
         Returns:
-            LLM 生成的专家总结
+            包含搜索总结和来源信息的字典
+            {
+                "summary": "搜索总结的文本",
+                "sources": [...],  # 来源列表
+                "source_attributions": [...]  # 溯源信息
+            }
         """
         # 1. 搜索
         self._log_step("网络搜索", f"query={question}, max_results={max_results}")
         
         with AgentTimer("搜索阶段", self.logger):
-            contents = self.search_tool.search_contents(
+            search_results = self.search_tool.fetch_with_metadata(
                 query=question,
                 max_results=max_results
             )
         
-        if not contents:
+        if not search_results or len(search_results) == 0:
             self.logger.warning("未找到相关信息")
-            return "未找到相关信息。"
+            return {
+                "summary": "未找到相关信息。",
+                "sources": [],
+                "source_attributions": []
+            }
         
-        self.logger.info(f"搜索到 {len(contents)} 个结果")
+        self.logger.info(f"搜索到 {len(search_results)} 个结果")
         
-        # 2. 构建总结提示词
+        # 2. 构建结构化的来源信息
+        formatted_sources = []
+        contents = []
+        
+        for i, result in enumerate(search_results):
+            source_info = {
+                "index": i + 1,
+                "title": result.get("title", "未知标题"),
+                "url": result.get("url", ""),
+                "content": result.get("content", ""),
+                "source": result.get("source", "网络")
+            }
+            formatted_sources.append(source_info)
+            contents.append(result.get("content", ""))
+        
+        # 3. 构建总结提示词
         sources_text = "\n\n".join([
-            f"[来源 {i+1}]\n{content}"
-            for i, content in enumerate(contents)
+            f"[来源 {s['index']}] {s['title']}\n{s['content']}"
+            for s in formatted_sources
         ])
         
         prompt = f"""你是一位专业的金融分析师。请基于以下搜索结果，对用户的问题给出专业、简洁的总结。
@@ -68,21 +97,41 @@ class SearchAgent(BaseAgent):
 搜索结果：
 {sources_text}
 
-请给出专业的总结回答，如果信息之间存在矛盾，请指出并分析。回答应简洁有力，突出重点。"""
+请给出专业的总结回答，如果信息之间存在矛盾，请指出并分析。回答应简洁有力，突出重点。
+
+注意：
+1. 在回答中，如涉及具体数据或事实，请以【来自Tavily实时搜索】标注
+2. 可以在回答末尾添加数据来源说明
+3. 如果涉及多个来源，可以标注【来源1】【来源2】等"""
         
-        # 3. LLM 总结
+        # 4. LLM 总结
         self._log_step("生成专家总结")
         
         with AgentTimer("LLM生成", self.logger):
             summary = self.llm_client.generate(
                 prompt=prompt,
-                system_prompt="你是一位专业的金融分析师，擅长整合多方信息并给出权威见解。",
+                system_prompt="你是一位专业的金融分析师，擅长整合多方信息并给出权威见解。请在回答中标注数据来源。",
                 temperature=0.3
             )
         
         self.logger.info(f"生成总结长度: {len(summary)} 字符")
         
-        return summary
+        # 5. 构建溯源信息
+        source_attributions = [
+            {
+                "type": "web_search",
+                "source": s["url"],
+                "title": s["title"],
+                "description": f"Tavily实时搜索: {s['title']}"
+            }
+            for s in formatted_sources
+        ]
+        
+        return {
+            "summary": summary,
+            "sources": formatted_sources,
+            "source_attributions": source_attributions
+        }
     
     @classmethod
     def as_node(
@@ -115,25 +164,34 @@ class SearchAgent(BaseAgent):
             - state.question: 用户原始问题（备选）
             
             输出：
-            - search_result: 搜索结果总结
+            - search_result: 搜索结果总结文本
+            - search_sources: 结构化来源信息
+            - source_attributions: 溯源信息
             """
             # 优先使用 PlanAgent 生成的 search_query
             query = state.get("search_query", "")
             if not query:
-                # 如果没有 search_query，使用原始问题
                 query = state.get("question", "")
             
             if not query:
-                return {update_key: "未提供查询内容"}
+                return {
+                    update_key: "未提供查询内容",
+                    "search_sources": [],
+                    "source_attributions": []
+                }
             
             agent.logger.info(f"搜索查询: {query[:100]}...")
             
             # 搜索并生成总结
-            summary = agent.run(
+            result = agent.run(
                 question=query,
                 max_results=max_results
             )
             
-            return {update_key: summary}
+            return {
+                update_key: result["summary"],
+                "search_sources": result["sources"],
+                "source_attributions": result["source_attributions"]
+            }
         
         return search_node

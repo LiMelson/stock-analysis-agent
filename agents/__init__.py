@@ -5,18 +5,31 @@ Agent 模块
 """
 
 from agents.base_agent import BaseAgent, AgentLogger, AgentTimer, agent_run_wrapper
-from agents.rag_agent import RAGAgent
+
+# 核心Agent
 from agents.search_agent import SearchAgent
-from agents.plan_agent import PlanAgent
 from agents.summary_agent import SummaryAgent
 
+# PlanAgent 及其子模块
+from agents.plan_agent import (
+    PlanAgent,
+    IntentRequirementAgent,
+    IntentType,
+    DataSourceRouter,
+)
+
 __all__ = [
+    # 基础类
     "BaseAgent",
     "AgentLogger",
     "AgentTimer",
     "agent_run_wrapper",
-    "RAGAgent",
+    # 核心Agent
     "SearchAgent",
-    "PlanAgent",
     "SummaryAgent",
+    # PlanAgent 及其子模块
+    "PlanAgent",
+    "IntentRequirementAgent",
+    "IntentType",
+    "DataSourceRouter",
 ]

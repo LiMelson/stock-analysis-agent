@@ -1,209 +1,172 @@
-# 股票分析助手
+# 📈 股票分析助手
 
-基于 LangGraph 的智能股票分析系统，支持知识库检索、实时搜索和多轮对话。
+基于 LLM + LangGraph 的智能股票分析系统，支持多轮对话，提供专业投资建议。
 
-## 功能特点
+## ✨ 功能特点
 
-- 🤖 **智能分析**：PlanAgent 自动分析用户需求，决定最佳分析策略
-- 📚 **知识库检索**：基于 FAISS 的向量检索，支持历史财报、投资理论查询
-- 🔍 **实时搜索**：Tavily 搜索 API 获取最新股价、新闻动态
-- ⚡ **并行执行**：RAG 和搜索可并行执行，提高响应速度
-- 💬 **多轮对话**：自动保留对话历史，支持上下文理解
-- 🎯 **专业报告**：SummaryAgent 生成结构化投资建议
+- **🧠 智能意图识别** - 自动识别用户意图（实时行情、投资分析、历史数据等）
+- **📊 多数据源融合** - 整合大盘指数、个股数据、市场情绪、题材板块
+- **💬 多轮对话支持** - 记住上下文，支持连续提问
+- **⚡ 缓存机制** - 数据缓存 5-60 分钟，提升响应速度
+- **🔍 知识库检索** - 基于向量检索的投资理论知识
 
-## 快速开始
+## 🏗️ 系统架构
 
-### 1. 安装依赖
+![工作流程](./workflow.png)
+
+### 工作流程说明
+
+1. **PlanAgent** - 分析用户意图，决定需要哪些数据源
+2. **并行采集** - 同时获取大盘指数、市场情绪、题材板块、个股数据
+3. **SummaryAgent** ⭐ - **项目亮点**：不仅汇总市场数据，还主动查询知识库，结合投资理论生成专业报告
+4. **输出** - 生成包含数据支撑和理论依据的投资建议
+
+> 💡 **核心设计**：Summary 节点采用"双源融合"——实时市场数据 + 知识库投资理论，提供更专业的分析
+
+## 📋 数据源
+
+| 数据源 | 说明 | 缓存时间 |
+|--------|------|----------|
+| 大盘指数 | 上证指数、深证成指、创业板指、沪深300、科创50 | 5分钟 |
+| 市场情绪 | 涨跌停家数统计 | 5分钟 |
+| 题材板块 | 热点板块排名 | 5分钟 |
+| 个股数据 | 实时行情、历史K线、财务数据 | 5-60分钟 |
+
+> 💡 数据来源：[Tushare Pro](https://tushare.pro/register) - 稳定可靠，不反爬
+
+## 🚀 快速开始
+
+### 1. 克隆项目
+
+```bash
+git clone https://github.com/yourusername/stock-analyzer.git
+cd stock-analyzer
+```
+
+### 2. 安装依赖
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. 配置环境变量
-
-复制 `.env.example` 为 `.env`，填写你的 API 密钥：
+### 3. 配置环境变量
 
 ```bash
 cp .env.example .env
 ```
 
-编辑 `.env` 文件：
+编辑 `.env` 文件，填入你的 API 密钥：
 
 ```env
-# DeepSeek API（或其他 OpenAI 兼容 API）
-API_KEY="your-api-key"
-BASE_URL="your-base-url"
-MODEL="your-modelname"
+# LLM API 配置（必填）
+# 支持 DeepSeek、OpenAI、Kimi 等
+API_KEY=your-api-key-here
+BASE_URL=https://api.deepseek.com/v1
+MODEL=deepseek-chat
 
-# Tavily API（用于实时搜索）
-TAVILY_API_KEY="your-tavily-key"
+# Tushare Pro Token（必填）
+# 注册地址：https://tushare.pro/register
+TUSHARE_TOKEN=your-tushare-token-here
 ```
 
-### 3. 运行程序
+### 4. 运行程序
 
 ```bash
 python main.py
 ```
 
-## 使用示例
+## 💡 使用示例
 
 ```
-============================================================
+============================================
   股票分析助手已启动！
   支持多轮对话，助手会记住上下文
-------------------------------------------------------------
+--------------------------------------------
   命令:
     exit / quit / 退出  - 结束对话
-============================================================
+============================================
 
-[1] 您: 贵州茅台怎么样？
-助手: 正在分析...
+[1] 您: 分析一下贵州茅台
+
+[1/3] PlanAgent: 正在分析意图和制定计划...
+    [PlanAgent] 意图识别: investment_analysis, 数据源: ['index', 'sentiment', 'theme', 'stock']
 ----------------------------------------
+    [IndexAgent] 正在获取大盘指数数据（Tushare）...
+    [IndexAgent] 获取成功，指数数量: 5
+    [SentimentAgent] 正在获取市场情绪数据（Tushare）...
+    [SentimentAgent] 获取成功，涨停: 45, 跌停: 12
+    [ThemeAgent] 正在获取题材板块数据（Tushare）...
+    [ThemeAgent] 获取成功，板块数: 10
+    [StockAgent] 正在获取个股数据（Tushare）...
+    [StockAgent] 获取成功: 贵州茅台
 
-📚 【知识库分析】
-贵州茅台是中国白酒行业龙头企业...
+[2/3] 数据获取完成，正在生成报告...
+    已获取数据: 大盘指数, 市场情绪, 题材板块, 个股数据
 
-🔍 【实时信息】
-贵州茅台(600519)今日股价...
+[3/3] SummaryAgent: 生成最终建议...
+========================================
 
-💡 【最终建议】
-基于基本面分析和技术面分析，建议...
+## 投资建议 - 贵州茅台(600519)
 
-[2] 您: 那它的财报数据呢？
-助手: 正在分析...
-----------------------------------------
-💡 【最终建议】
-根据您之前询问的贵州茅台，2023年财报显示...
+### 1. 大盘环境
+...（省略具体内容）...
+
+### 2. 个股分析
+...（省略具体内容）...
+
+### 3. 操作建议
+...（省略具体内容）...
+
+---
+⚠️ **风险提示**: 以上分析仅供参考，不构成投资建议。股市有风险，投资需谨慎。
 ```
 
-## 项目结构
+## 🔧 配置说明
+
+### Tushare Pro 积分说明
+
+- **新用户**: 注册送 200 积分
+- **免费额度**: 每分钟 120 次调用，足够个人使用
+- **获取更多积分**: 完善资料、邀请好友、社区贡献
+
+### 支持的 LLM 模型
+
+| 服务商 | BASE_URL | 说明 |
+|--------|----------|------|
+| DeepSeek | `https://api.deepseek.com/v1` | 推荐，价格便宜 |
+| OpenAI | `https://api.openai.com/v1` | 官方 API |
+| Kimi | `https://api.moonshot.cn/v1` | 国内可用 |
+
+## 📁 项目结构
 
 ```
-.
-├── main.py                      # 主程序入口
-├── model_cache/                 # 模型缓存目录（Embedding 模型）
-├── core/                        # 核心模块
-│   ├── graph.py                 # LangGraph 工作流构建
-│   ├── router.py                # 路由决策（支持并行）
-│   ├── nodes.py                 # 节点工厂
-│   ├── state.py                 # 状态定义
-│   └── __init__.py
-├── agents/                      # 智能体
-│   ├── plan_agent.py            # 计划 Agent（分析需求）
-│   ├── rag_agent.py             # RAG Agent（知识库检索）
-│   ├── search_agent.py          # 搜索 Agent（实时信息）
-│   ├── summary_agent.py         # 总结 Agent（生成报告）
-│   └── base_agent.py            # 基础 Agent 类
-├── rag/                         # RAG 模块
-│   ├── knowledge_base.py        # 知识库管理
-│   ├── vector_store.py          # FAISS 向量存储
-│   ├── rag_retriever.py         # RAG 检索器
-│   ├── document_processor.py    # 文档处理
-│   └── extract.py               # 文档加载
-├── configs/                     # 配置
-│   ├── model_config.py          # 模型配置（LLM + Embedding）
-│   └── data_schema.py           # 数据模型
-├── tools/                       # 工具
-│   └── web_search.py            # Tavily 搜索
-├── vector_stores/               # 向量库存储
-│   └── default_kb/              # 默认知识库
-└── requirements.txt             # 依赖列表
+股票分析助手/
+├── agents/                 # Agent 模块
+│   ├── plan_agent/        # 计划制定 + 意图识别
+│   ├── summary_agent.py   # 综合分析报告
+│   └── base_agent.py      # Agent 基类
+├── data_sources/          # 数据源模块
+│   ├── index.py          # 大盘指数
+│   ├── stock.py          # 个股数据
+│   ├── sentiment.py      # 市场情绪
+│   └── theme.py          # 题材板块
+├── core/                  # 核心模块
+│   ├── graph.py          # LangGraph 工作流
+│   ├── router.py         # 路由决策
+│   └── state.py          # 状态定义
+├── configs/              # 配置模块
+│   ├── model_config.py   # LLM 配置
+│   ├── cache.py         # 缓存工具
+│   └── data_source_utils.py  # 数据源工具
+├── rag/                  # 知识库模块
+│   ├── knowledge_base.py
+│   └── rag_retriever.py
+├── main.py              # 主入口
+├── requirements.txt     # 依赖列表
+├── .env.example        # 环境变量示例
+└── README.md           # 本文件
 ```
 
-## 工作流程
+## ⚠️ 免责声明
 
-![股票分析助手工作流程图](workflow.jpg)
-
-### 流程说明
-
-| 步骤 | 节点 | 说明 |
-|:---:|:---|:---|
-| 1 | **PlanAgent** | 理解用户意图，规划分析策略 |
-| 2 | **路由决策** | 智能判断需要哪些数据源 |
-| 3 | **RAG Agent** | 从本地知识库检索相关文档 |
-| 4 | **Search Agent** | 调用 Tavily API 获取实时信息 |
-| 5 | **并行执行** | RAG 和搜索可同时运行，提高效率 |
-| 6 | **Summary Agent** | 整合结果，生成专业投资建议 |
-| 7 | **Cleanup Node** | 保存对话历史，支持多轮交互 |
-
-## 配置说明
-
-### 知识库
-
-默认知识库位于 `vector_stores/default_kb/`，包含 2052 个文档片段。
-
-> **版权说明**：本项目使用《股市操练大全》系列书籍作为知识库源文件。由于版权问题，PDF 文件不包含在仓库中，请自行准备。
-
-如需添加新文档：
-
-```python
-from configs.model_config import EmbeddingModel
-from rag.knowledge_base import KnowledgeBaseManager
-
-# 初始化
-embedding_model = EmbeddingModel()
-kb_manager = KnowledgeBaseManager(embedding_model)
-kb_manager.init_knowledge_base("您的知识库名称", vector_store_dir="vector_stores")
-
-# 添加文档
-kb_manager.add_document("path/to/document.pdf")
-kb_manager.save("vector_stores")
-```
-
-### Temperature 设置
-
-各 Agent 的 temperature 与其功能匹配：
-
-| Agent | Temperature | 说明 |
-|-------|-------------|------|
-| PlanAgent | 0.5 | 计划需要一定灵活性 |
-| RAGAgent | 0.3 | 分析要准确 |
-| SearchAgent | 0.3 | 总结要客观 |
-| SummaryAgent | 0.5 | 报告要平衡 |
-
-### 多轮对话
-
-系统自动保留最近 10 轮对话历史，支持上下文理解：
-
-```
-[1] 您: 分析一下茅台
-[2] 您: 那它现在适合买入吗？      ← 理解"它"指茅台
-[3] 您: 目标价多少？              ← 理解仍在讨论茅台
-```
-
-## 注意事项
-
-1. **API 密钥**：确保 `.env` 文件中的 API 密钥有效
-2. **网络连接**：首次运行需要下载 Embedding 模型（使用 hf-mirror 镜像）
-3. **知识库**：如需更新知识库，请重新运行文档处理流程
-4. **搜索功能**：需要 Tavily API Key，否则搜索功能不可用
-
-## 技术栈
-
-### 核心框架
-- **框架**：LangGraph（工作流编排）
-- **LLM**：DeepSeek / OpenAI 兼容 API
-- **Embedding**：BAAI/bge-small-zh-v1.5（中文向量嵌入模型）
-
-### RAG & 检索增强
-- **向量数据库**：FAISS（Facebook AI Similarity Search）
-- **文档处理**：PyPDF2 / pdfplumber（PDF解析）、RecursiveCharacterTextSplitter（文本分块）
-- **向量检索**：余弦相似度检索 + Top-K 召回
-- **知识库**：本地向量化知识库（支持增量更新）
-- **检索策略**：多路召回（向量检索 + 实时搜索融合）
-
-### 增强检索技术
-- **查询重写（Query Rewriting）**：PlanAgent 自动分析用户意图，优化检索 query
-- **混合检索（Hybrid Retrieval）**：知识库 RAG + Tavily 实时搜索并行执行
-- **重排序（Reranking）**：基于相关性分数对多源结果进行排序融合
-- **上下文压缩（Context Compression）**：智能筛选相关文档片段，避免上下文溢出
-
-### 工具与 API
-- **实时搜索**：Tavily Search API（高质量网络搜索）
-- **天气数据**：高德天气 API（国内稳定）
-- **网络请求**：requests、urllib3
-
-### 开发环境
-- **Python**：3.9+
-- **依赖管理**：pip + requirements.txt
-- **环境配置**：python-dotenv
+本项目提供的分析和建议**仅供参考，不构成投资建议**。股市有风险，投资需谨慎。用户应根据自身情况独立做出投资决策，本项目不对任何投资损失负责。

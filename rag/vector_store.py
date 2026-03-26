@@ -184,7 +184,7 @@ class RAGVectorStoreManager:
 
     def get_or_create_store(self, kb_id: str) -> FaissVectorStore:
         if kb_id not in self._vector_stores:
-            dim = self.embedding_model.get_dimension()
+            dim = self.embedding_model.get_sentence_embedding_dimension()
             self._vector_stores[kb_id] = FaissVectorStore(dimension=dim)
         return self._vector_stores[kb_id]
 
@@ -228,7 +228,7 @@ class RAGVectorStoreManager:
         kb_save_dir = os.path.join(save_dir, kb_id)
         
         # 创建新的存储实例
-        dim = self.embedding_model.get_dimension()
+        dim = self.embedding_model.get_sentence_embedding_dimension()
         store = FaissVectorStore(dimension=dim)
         
         # 尝试加载

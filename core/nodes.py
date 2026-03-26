@@ -4,17 +4,59 @@ if TYPE_CHECKING:
     from rag.rag_retriever import RAGTool
 
 
+def create_index_node() -> Callable:
+    """
+    创建大盘指数数据节点
+    
+    Returns:
+        LangGraph 节点函数
+    """
+    from data_sources.index import IndexDataSource
+    return IndexDataSource.as_node()
+
+
+def create_sentiment_node() -> Callable:
+    """
+    创建市场情绪数据节点
+    
+    Returns:
+        LangGraph 节点函数
+    """
+    from data_sources.sentiment import SentimentDataSource
+    return SentimentDataSource.as_node()
+
+
+def create_stock_node() -> Callable:
+    """
+    创建个股数据节点
+    
+    Returns:
+        LangGraph 节点函数
+    """
+    from data_sources.stock import StockDataSource
+    return StockDataSource.as_node()
+
+
+def create_theme_node() -> Callable:
+    """
+    创建题材板块数据节点
+    
+    Returns:
+        LangGraph 节点函数
+    """
+    from data_sources.theme import ThemeDataSource
+    return ThemeDataSource.as_node()
+
+
 def create_rag_node(
     rag_tool: Optional['RAGTool'] = None,
-    output_key: str = "rag_answer",
-    top_k: int = 5,
-    use_mqe: bool = False,
-    use_hyde: bool = False
+    output_key: str = "rag_result",
+    top_k: int = 5
 ) -> Callable:
     """
-    创建 RAG 节点（检索 + 专家分析总结）
+    创建 RAG 节点（知识库检索）
     
-    功能：从 state 取 rag_query（PlanAgent 生成）-> RAGAgent 检索并分析总结 -> 结果写入 state
+    功能：从 state 取 rag_query（PlanAgent 生成）-> RAGDataSource 检索 -> 结果写入 state
     
     注意：优先使用 state.rag_query，如果没有则使用 state.question
     如果 rag_tool 为 None，返回一个返回空结果的节点
@@ -22,17 +64,14 @@ def create_rag_node(
     if rag_tool is None:
         # 如果没有 RAG 工具，返回空结果
         def empty_rag_node(state) -> Dict[str, Any]:
-            return {output_key: "未配置知识库"}
+            return {
+                "rag_result": "未配置知识库",
+                "rag_sources": []
+            }
         return empty_rag_node
     
-    from agents.rag_agent import RAGAgent
-    return RAGAgent.as_node(
-        rag_tool=rag_tool,
-        output_key=output_key,
-        top_k=top_k,
-        use_mqe=use_mqe,
-        use_hyde=use_hyde
-    )
+    from data_sources.rag import RAGDataSource
+    return RAGDataSource.as_node(rag_tool)
 
 
 def create_search_node(
@@ -55,7 +94,11 @@ def create_search_node(
     if not has_api_key:
         # 如果没有 API key，返回提示信息
         def empty_search_node(state) -> Dict[str, Any]:
-            return {update_key: "未配置搜索 API（请设置 TAVILY_API_KEY 环境变量）"}
+            return {
+                update_key: "未配置搜索 API（请设置 TAVILY_API_KEY 环境变量）",
+                "search_sources": [],
+                "source_attributions": []
+            }
         return empty_search_node
     
     from agents.search_agent import SearchAgent
@@ -95,15 +138,18 @@ def create_plan_node() -> Callable:
     return PlanAgent.as_node()
 
 
-def create_summary_node() -> Callable:
+def create_summary_node(rag_tool: Optional['RAGTool'] = None) -> Callable:
     """
     创建总结节点（流式输出）
     
+    Args:
+        rag_tool: RAGTool 实例，用于Summary节点主动查询知识库
+        
     Returns:
         LangGraph 节点函数
     """
     from agents.summary_agent import SummaryAgent
-    return SummaryAgent.as_node()
+    return SummaryAgent.as_node(rag_tool=rag_tool)
 
 
 def create_cleanup_node(max_history_turns: int = 10) -> Callable:

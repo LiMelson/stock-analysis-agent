@@ -6,14 +6,20 @@
 
 import os
 import sys
+import warnings
 from pathlib import Path
 from typing import List
+
+# 屏蔽 PDF 解析的字体警告
+warnings.filterwarnings("ignore", message="Could not get FontBBox.*")
+warnings.filterwarnings("ignore", category=UserWarning)
 
 # 添加项目根目录到路径
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from rag.rag_retriever import RAGTool
+from rag.knowledge_base import KnowledgeBaseManager
+from configs.model_config import EmbeddingModel, EmbeddingConfig
 
 #加国内镜像源
 os.environ["HF_ENDPOINT"]="https://hf-mirror.com"
@@ -33,23 +39,39 @@ def get_pdf_files(docs_dir: Path) -> List[Path]:
     return pdf_files
 
 
+def get_existing_files(kb: KnowledgeBaseManager) -> set:
+    """获取知识库中已存在的文件名集合"""
+    info = kb.get_knowledge_base_info()
+    existing = set()
+    for doc in info.get('documents', []):
+        filename = doc.get('metadata', {}).get('filename')
+        if filename:
+            existing.add(filename)
+    return existing
+
+
 def load_documents_to_kb(
     embedding_model: str = 'BAAI/bge-small-zh-v1.5',
     force_rebuild: bool = False
-) -> RAGTool:
+) -> KnowledgeBaseManager:
     """
-    将 docs 文件夹中的文档加载到知识库
+    将 docs 文件夹中的文档加载到知识库（支持增量导入）
     
     Args:
         embedding_model: 嵌入模型名称
         force_rebuild: 是否强制重建知识库（忽略已有存储）
         
     Returns:
-        初始化好的 RAGTool 实例
+        初始化好的 KnowledgeBaseManager 实例
     """
-    # 创建 RAG 工具
-    print(f"[INFO] 初始化 RAG 工具 (模型: {embedding_model})...")
-    rag = RAGTool(embedding_model=embedding_model)
+    # 加载嵌入模型
+    print(f"[INFO] 加载嵌入模型: {embedding_model}...")
+    config = EmbeddingConfig(model_name=embedding_model)
+    embedding = EmbeddingModel(config)
+    
+    # 创建知识库管理器
+    print(f"[INFO] 初始化知识库管理器...")
+    kb = KnowledgeBaseManager(embedding_model=embedding)
     
     # 确保 vector_stores 目录存在
     VECTOR_STORE_DIR.mkdir(parents=True, exist_ok=True)
@@ -57,29 +79,42 @@ def load_documents_to_kb(
     # 初始化知识库
     vector_store_path = str(VECTOR_STORE_DIR)
     
-    if not force_rebuild:
-        # 尝试加载已有知识库
-        loaded = rag.init_knowledge_base(
-            name="股市操练大全知识库",
-            description="包含股市操练大全系列书籍的股市投资知识",
-            vector_store_dir=vector_store_path
-        )
-        if loaded:
-            print(f"[INFO] 知识库信息: {rag.get_knowledge_base_info()}")
-            return rag
-    else:
+    if force_rebuild:
         # 强制重建
-        rag.init_knowledge_base(
+        kb.init_knowledge_base(
             name="股市操练大全知识库",
             description="包含股市操练大全系列书籍的股市投资知识"
         )
         print("[INFO] 强制重建知识库...")
+    else:
+        # 尝试加载已有知识库（或创建新的）
+        kb.init_knowledge_base(
+            name="股市操练大全知识库",
+            description="包含股市操练大全系列书籍的股市投资知识",
+            vector_store_dir=vector_store_path
+        )
     
     # 获取 PDF 文件列表
     pdf_files = get_pdf_files(DOCS_DIR)
     if not pdf_files:
         print("[WARN] 没有找到 PDF 文件")
-        return rag
+        return kb
+    
+    # 过滤已存在的文件（增量导入）
+    if not force_rebuild:
+        existing_files = get_existing_files(kb)
+        new_pdf_files = [f for f in pdf_files if f.name not in existing_files]
+        
+        if existing_files:
+            print(f"[*] 知识库已有 {len(existing_files)} 个文档")
+        
+        if not new_pdf_files:
+            print(f"[*] 没有新文档需要导入（共 {len(pdf_files)} 个，已全部存在）")
+            print(f"[INFO] 知识库信息: {kb.get_knowledge_base_info()}")
+            return kb
+        
+        print(f"[*] 发现 {len(new_pdf_files)} 个新文档需要导入")
+        pdf_files = new_pdf_files
     
     # 批量添加文档
     print(f"\n[INFO] 开始导入文档...")
@@ -89,7 +124,7 @@ def load_documents_to_kb(
     for i, pdf_file in enumerate(pdf_files, 1):
         print(f"\n[{i}/{len(pdf_files)}] 正在处理: {pdf_file.name}")
         try:
-            doc_id = rag.add_document(
+            doc_id = kb.add_document(
                 file_path=str(pdf_file),
                 metadata={
                     "category": "股市操练大全",
@@ -104,7 +139,7 @@ def load_documents_to_kb(
     
     # 保存知识库
     print(f"\n[INFO] 保存知识库到: {vector_store_path}")
-    rag.save_knowledge_base(vector_store_path)
+    kb.save(vector_store_path)
     
     # 打印统计
     print(f"\n[INFO] 导入统计:")
@@ -117,12 +152,12 @@ def load_documents_to_kb(
             print(f"   - {name}: {error}")
     
     # 打印知识库信息
-    kb_info = rag.get_knowledge_base_info()
+    kb_info = kb.get_knowledge_base_info()
     print(f"\n[INFO] 知识库信息:")
     print(f"   - 名称: {kb_info.get('name')}")
     print(f"   - 文档数: {kb_info.get('document_count', 0)}")
     
-    return rag
+    return kb
 
 
 def main():
@@ -161,7 +196,7 @@ def main():
         sys.exit(1)
     
     # 执行导入
-    rag = load_documents_to_kb(
+    kb = load_documents_to_kb(
         embedding_model=args.model,
         force_rebuild=args.rebuild
     )
